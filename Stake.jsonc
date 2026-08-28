@@ -1,0 +1,51 @@
+{
+  "name": "Stake",
+  "type": "object",
+  "properties": {
+    "member_id": {
+      "type": "string"
+    },
+    "amount_usd": {
+      "type": "number"
+    },
+    "currency": {
+      "type": "string",
+      "default": "USDT"
+    },
+    "duration_days": {
+      "type": "number"
+    },
+    "start_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "end_date": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "daily_rate": {
+      "type": "number"
+    },
+    "accumulated_reward": {
+      "type": "number",
+      "default": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "completed",
+        "cancelled"
+      ],
+      "default": "active"
+    },
+    "last_reward_date": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "amount_usd",
+    "duration_days"
+  ]
+}

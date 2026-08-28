@@ -1,0 +1,62 @@
+{
+  "name": "Transaction",
+  "type": "object",
+  "properties": {
+    "member_id": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "deposit",
+        "withdraw",
+        "swap",
+        "stake",
+        "unstake",
+        "staking_reward",
+        "referral",
+        "airdrop",
+        "api_fee",
+        "admin_adjust"
+      ]
+    },
+    "from_currency": {
+      "type": "string"
+    },
+    "to_currency": {
+      "type": "string"
+    },
+    "amount": {
+      "type": "number"
+    },
+    "amount_out": {
+      "type": "number",
+      "default": 0
+    },
+    "fee": {
+      "type": "number",
+      "default": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "pending",
+        "failed"
+      ],
+      "default": "completed"
+    },
+    "tx_hash": {
+      "type": "string"
+    },
+    "explorer_url": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "type"
+  ]
+}

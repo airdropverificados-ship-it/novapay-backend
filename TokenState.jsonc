@@ -1,0 +1,31 @@
+{
+  "name": "TokenState",
+  "type": "object",
+  "properties": {
+    "nvt_price": {
+      "type": "number",
+      "default": 0.001
+    },
+    "max_supply": {
+      "type": "number",
+      "default": 50000000
+    },
+    "circulating_supply": {
+      "type": "number",
+      "default": 0
+    },
+    "is_trading_enabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "total_swaps": {
+      "type": "number",
+      "default": 0
+    },
+    "total_volume_usdt": {
+      "type": "number",
+      "default": 0
+    }
+  },
+  "required": []
+}
