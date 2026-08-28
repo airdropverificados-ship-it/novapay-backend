@@ -1,0 +1,84 @@
+const db = globalThis.__B44_DB__ || { auth:{ isAuthenticated: async()=>false, me: async()=>null }, entities:new Proxy({}, { get:()=>({ filter:async()=>[], get:async()=>null, create:async()=>({}), update:async()=>({}), delete:async()=>({}) }) }), integrations:{ Core:{ UploadFile:async()=>({ file_url:'' }) } } };
+
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
+import { getConfig, payoutCall, buildCallback } from "../../shared/oxapay.ts";
+import { getBalance, setBalancePatch, appCoin, PLATFORM_FEE, splitFee } from "../../shared/balance.ts";
+
+export default async function(req) {
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await db.auth.me();
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    const body = await req.json().catch(() => ({}));
+    const address = String(body.address || '').trim();
+    const amount = parseFloat(body.amount);
+    const oxaCurrency = String(body.currency || '').toUpperCase();
+    const network = String(body.network || '');
+    const networkFee = parseFloat(body.networkFee) || 0;
+    if (!address) return Response.json({ error: 'Dirección de destino requerida' }, { status: 400 });
+    if (!amount || amount <= 0) return Response.json({ error: 'Monto inválido' }, { status: 400 });
+    if (!oxaCurrency) return Response.json({ error: 'Moneda requerida' }, { status: 400 });
+
+    const coin = appCoin(oxaCurrency);
+    const members = await db.asServiceRole.entities.Member.filter({ created_by_id: user.id });
+    const member = members && members[0];
+    if (!member) return Response.json({ error: 'Miembro no encontrado' }, { status: 404 });
+    if (!member.is_pin_set || String(member.pin_code) !== String(body.pin)) {
+      return Response.json({ error: 'PIN incorrecto' }, { status: 403 });
+    }
+
+    const balance = getBalance(member, coin);
+    if (amount > balance) return Response.json({ error: 'Saldo insuficiente' }, { status: 400 });
+
+    const cfg = await getConfig(base44);
+    if (!cfg || !cfg.payout_api_key) return Response.json({ error: 'OxaPay Payout no configurado' }, { status: 400 });
+
+    const platformFee = +(amount * PLATFORM_FEE).toFixed(8);
+    const sendAmount = +(amount - platformFee - networkFee).toFixed(8);
+    if (sendAmount <= 0) return Response.json({ error: 'El monto no cubre comisiones de red' }, { status: 400 });
+
+    const payload = {
+      address,
+      amount: sendAmount,
+      currency: oxaCurrency,
+      description: 'NovaPay withdraw ' + (member.username || member.telegram_id || ''),
+    };
+    if (network) payload.network = network;
+    const cb = buildCallback(cfg);
+    if (cb) payload.callback_url = cb;
+
+    const r = await payoutCall('/payout', cfg.payout_api_key, payload);
+    if (!r || r.status !== 200 || !r.data) {
+      return Response.json({ error: (r && r.message) || 'Error en OxaPay payout', raw: r }, { status: 502 });
+    }
+
+    const trackId = String(r.data.track_id);
+    await db.asServiceRole.entities.Member.update(member.id, setBalancePatch(member, coin, balance - amount));
+
+    const tlist = await db.asServiceRole.entities.Treasury.filter({ currency: coin });
+    let t = tlist && tlist[0];
+    if (!t) t = await db.asServiceRole.entities.Treasury.create({ currency: coin, total_collected: 0, lp_injected: 0, owner_profit: 0 });
+    const { lp, owner } = splitFee(platformFee);
+    await db.asServiceRole.entities.Treasury.update(t.id, {
+      total_collected: +((t.total_collected || 0) + platformFee).toFixed(8),
+      lp_injected: +((t.lp_injected || 0) + lp).toFixed(8),
+      owner_profit: +((t.owner_profit || 0) + owner).toFixed(8),
+    });
+
+    await db.asServiceRole.entities.Transaction.create({
+      member_id: member.id,
+      type: 'withdraw',
+      from_currency: coin,
+      amount,
+      amount_out: sendAmount,
+      fee: +(platformFee + networkFee).toFixed(8),
+      status: 'pending',
+      tx_hash: trackId,
+      description: 'Retiro OxaPay a ' + address.slice(0, 12) + '...',
+    });
+
+    return Response.json({ ok: true, track_id: trackId, status: r.data.status, platformFee, networkFee, receive: sendAmount });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+}

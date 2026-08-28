@@ -1,0 +1,48 @@
+const db = globalThis.__B44_DB__ || { auth:{ isAuthenticated: async()=>false, me: async()=>null }, entities:new Proxy({}, { get:()=>({ filter:async()=>[], get:async()=>null, create:async()=>({}), update:async()=>({}), delete:async()=>({}) }) }), integrations:{ Core:{ UploadFile:async()=>({ file_url:'' }) } } };
+
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
+
+const COIN_IDS = {
+  'btc-bitcoin': 'BTC',
+  'eth-ethereum': 'ETH',
+  'bnb-binance-coin': 'BSC',
+  'sol-solana': 'SOL',
+  'ltc-litecoin': 'LTC',
+  'trx-tron': 'TRX',
+  'doge-dogecoin': 'DOGE',
+  'matic-polygon': 'MATIC',
+  'shib-shiba-inu': 'SHIB',
+  'xrp-xrp': 'XRP',
+  'bch-bitcoin-cash': 'BCH',
+  'toncoin-the-open-network': 'TON',
+};
+
+export default async function (req) {
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await db.auth.me();
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const ids = Object.keys(COIN_IDS).join(',');
+    const url = `https://api.coinpaprika.com/v1/tickers?quotes=usd`;
+
+    const res = await fetch(url, { headers: { accept: 'application/json' } });
+    if (!res.ok) return Response.json({ error: `CoinPaprika ${res.status}` }, { status: 502 });
+
+    const list = await res.json();
+    const byId = Object.fromEntries(list.map((t) => [t.id, t]));
+    const prices = { USDT: { price: 1, change: 0 } };
+    for (const [id, sym] of Object.entries(COIN_IDS)) {
+      const t = byId[id];
+      if (t?.quotes?.USD) {
+        prices[sym] = {
+          price: t.quotes.USD.price,
+          change: t.quotes.USD.percent_change_24h ?? 0,
+        };
+      }
+    }
+    return Response.json({ prices, updated: new Date().toISOString() });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+}

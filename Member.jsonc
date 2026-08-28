@@ -1,0 +1,98 @@
+{
+  "name": "Member",
+  "type": "object",
+  "properties": {
+    "telegram_id": {
+      "type": "string"
+    },
+    "username": {
+      "type": "string"
+    },
+    "language": {
+      "type": "string",
+      "enum": [
+        "es",
+        "en",
+        "ru",
+        "pt",
+        "de",
+        "fr"
+      ],
+      "default": "es"
+    },
+    "referral_code": {
+      "type": "string"
+    },
+    "referred_by": {
+      "type": "string"
+    },
+    "usdt_balance": {
+      "type": "number",
+      "default": 0
+    },
+    "ton_balance": {
+      "type": "number",
+      "default": 0
+    },
+    "bsc_balance": {
+      "type": "number",
+      "default": 0
+    },
+    "sol_balance": {
+      "type": "number",
+      "default": 0
+    },
+    "ltc_balance": {
+      "type": "number",
+      "default": 0
+    },
+    "nvt_balance": {
+      "type": "number",
+      "default": 0
+    },
+    "balances": {
+      "type": "object",
+      "default": {}
+    },
+    "evm_deposit_address": {
+      "type": "string"
+    },
+    "trc20_deposit_address": {
+      "type": "string"
+    },
+    "deposit_addresses": {
+      "type": "object",
+      "default": {}
+    },
+    "pin_code": {
+      "type": "string"
+    },
+    "is_pin_set": {
+      "type": "boolean",
+      "default": false
+    },
+    "total_deposited_usd": {
+      "type": "number",
+      "default": 0
+    },
+    "airdrop_claimed_nvt": {
+      "type": "number",
+      "default": 0
+    },
+    "last_roulette_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "last_chest_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "is_admin": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "telegram_id"
+  ]
+}

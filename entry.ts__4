@@ -1,0 +1,77 @@
+const db = globalThis.__B44_DB__ || { auth:{ isAuthenticated: async()=>false, me: async()=>null }, entities:new Proxy({}, { get:()=>({ filter:async()=>[], get:async()=>null, create:async()=>({}), update:async()=>({}), delete:async()=>({}) }) }), integrations:{ Core:{ UploadFile:async()=>({ file_url:'' }) } } };
+
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
+import { getConfig, getOrCreateConfig, merchantGet, payoutGet, randomSecret } from "../../shared/oxapay.ts";
+
+function mask(key) {
+  if (!key) return '';
+  if (key.length <= 8) return '••••';
+  return key.slice(0, 4) + '••••' + key.slice(-4);
+}
+
+export default async function(req) {
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await db.auth.me();
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    if (user.role !== 'admin') return Response.json({ error: 'Forbidden' }, { status: 403 });
+
+    const body = await req.json().catch(() => ({}));
+    const action = body.action || 'get_config';
+
+    if (action === 'save_config') {
+      const cfg = await getOrCreateConfig(base44);
+      const updates = {};
+      if (typeof body.merchant_api_key === 'string' && body.merchant_api_key.trim()) updates.merchant_api_key = body.merchant_api_key.trim();
+      if (typeof body.payout_api_key === 'string' && body.payout_api_key.trim()) updates.payout_api_key = body.payout_api_key.trim();
+      if (typeof body.webhook_url === 'string') updates.webhook_url = body.webhook_url.trim();
+      if (typeof body.webhook_secret === 'string' && body.webhook_secret.trim()) updates.webhook_secret = body.webhook_secret.trim();
+      if (!cfg.webhook_secret && !updates.webhook_secret) updates.webhook_secret = randomSecret();
+      const updated = await db.asServiceRole.entities.OxaPayConfig.update(cfg.id, updates);
+      return Response.json({ ok: true, config: {
+        merchant_api_key_masked: mask(updated.merchant_api_key),
+        payout_api_key_masked: mask(updated.payout_api_key),
+        webhook_url: updated.webhook_url,
+        webhook_secret: updated.webhook_secret,
+        is_active: updated.is_active,
+        has_merchant: !!updated.merchant_api_key,
+        has_payout: !!updated.payout_api_key,
+      } });
+    }
+
+    if (action === 'test') {
+      const cfg = await getConfig(base44);
+      if (!cfg) return Response.json({ error: 'Sin configuración guardada' }, { status: 400 });
+      if (!cfg.merchant_api_key) return Response.json({ error: 'Falta la Merchant API Key (depósitos)' }, { status: 400 });
+      let merchantOk = false, merchantMsg = '';
+      try {
+        const r = await merchantGet('/payment', cfg.merchant_api_key, { size: 1 });
+        merchantOk = r && r.status === 200;
+        merchantMsg = r && r.message ? r.message : (r && r.error && r.error.message) || 'sin respuesta';
+      } catch (e) { merchantMsg = e.message; }
+      let payoutOk = false, payoutMsg = 'Payout key no configurada';
+      if (cfg.payout_api_key) {
+        try {
+          const r = await payoutGet('/payout', cfg.payout_api_key, { size: 1 });
+          payoutOk = r && r.status === 200;
+          payoutMsg = r && r.message ? r.message : (r && r.error && r.error.message) || 'sin respuesta';
+        } catch (e) { payoutMsg = e.message; }
+      }
+      return Response.json({ merchant: { ok: merchantOk, message: merchantMsg }, payout: { ok: payoutOk, message: payoutMsg } });
+    }
+
+    const cfg = await getConfig(base44);
+    if (!cfg) return Response.json({ config: null });
+    return Response.json({ config: {
+      merchant_api_key_masked: mask(cfg.merchant_api_key),
+      payout_api_key_masked: mask(cfg.payout_api_key),
+      webhook_url: cfg.webhook_url,
+      webhook_secret: cfg.webhook_secret,
+      is_active: cfg.is_active,
+      has_merchant: !!cfg.merchant_api_key,
+      has_payout: !!cfg.payout_api_key,
+    } });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+}

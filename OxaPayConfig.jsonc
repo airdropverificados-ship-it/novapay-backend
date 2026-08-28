@@ -1,0 +1,48 @@
+{
+  "name": "OxaPayConfig",
+  "type": "object",
+  "properties": {
+    "merchant_api_key": {
+      "type": "string"
+    },
+    "payout_api_key": {
+      "type": "string"
+    },
+    "webhook_url": {
+      "type": "string"
+    },
+    "webhook_secret": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "merchant_api_key",
+    "payout_api_key"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

@@ -1,0 +1,82 @@
+const db = globalThis.__B44_DB__ || { auth:{ isAuthenticated: async()=>false, me: async()=>null }, entities:new Proxy({}, { get:()=>({ filter:async()=>[], get:async()=>null, create:async()=>({}), update:async()=>({}), delete:async()=>({}) }) }), integrations:{ Core:{ UploadFile:async()=>({ file_url:'' }) } } };
+
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
+import { getConfig } from "../../shared/oxapay.ts";
+import { getBalance, setBalancePatch, appCoin } from "../../shared/balance.ts";
+
+const STABLE = ['USDT', 'USDC', 'DAI'];
+
+export default async function(req) {
+  try {
+    const base44 = createClientFromRequest(req);
+    const cfg = await getConfig(base44);
+    const url = new URL(req.url);
+    const secret = url.searchParams.get('secret');
+    if (!cfg || !cfg.webhook_secret || secret !== cfg.webhook_secret) {
+      return Response.json({ error: 'Invalid secret' }, { status: 401 });
+    }
+
+    const body = await req.json().catch(() => ({}));
+    const data = body.data || body;
+    const trackId = String(data.track_id || '');
+    const status = String(data.status || '').toLowerCase();
+    if (!trackId) return Response.json({ ok: true, ignored: 'no track_id' });
+
+    const addrs = await db.asServiceRole.entities.DepositAddress.filter({ track_id: trackId });
+    const da = addrs && addrs[0];
+    if (!da) return Response.json({ ok: true, ignored: 'no matching address' });
+    if (status !== 'paid') return Response.json({ ok: true, status });
+
+    let amount = 0;
+    let currency = da.currency;
+    let txHash = '';
+    const txs = data.txs || [];
+    if (Array.isArray(txs) && txs.length) {
+      const tx = txs[0];
+      amount = parseFloat(tx.amount || 0);
+      txHash = tx.tx_hash || '';
+      if (tx.auto_convert && tx.auto_convert.processed) {
+        amount = parseFloat(tx.auto_convert.amount || amount);
+        currency = String(tx.auto_convert.currency || currency).toUpperCase();
+      } else if (tx.currency) {
+        currency = String(tx.currency).toUpperCase();
+      }
+    } else {
+      amount = parseFloat(data.amount || 0);
+    }
+    if (!amount) return Response.json({ ok: true, ignored: 'no amount' });
+
+    if (txHash) {
+      const dup = await db.asServiceRole.entities.Transaction.filter({ tx_hash: txHash, type: 'deposit' });
+      if (dup && dup.length) return Response.json({ ok: true, duplicate: true });
+    }
+
+    const members = await db.asServiceRole.entities.Member.filter({ id: da.member_id });
+    const member = members && members[0];
+    if (!member) return Response.json({ ok: true, ignored: 'no member' });
+
+    const coin = appCoin(currency);
+    const newBal = getBalance(member, coin) + amount;
+    const patch = setBalancePatch(member, coin, newBal);
+    if (STABLE.includes(currency)) {
+      patch.total_deposited_usd = +((member.total_deposited_usd || 0) + amount).toFixed(2);
+    }
+    await db.asServiceRole.entities.Member.update(member.id, patch);
+
+    await db.asServiceRole.entities.Transaction.create({
+      member_id: member.id,
+      type: 'deposit',
+      from_currency: coin,
+      amount,
+      status: 'completed',
+      tx_hash: txHash || trackId,
+      description: 'Depósito OxaPay ' + currency + ' · ' + da.network,
+    });
+
+    db.functions.invoke('notifyTelegramDeposit', { member_id: member.id, amount, currency, tx_hash: txHash || trackId }).catch(() => {});
+
+    return Response.json({ ok: true, credited: amount, currency });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+}

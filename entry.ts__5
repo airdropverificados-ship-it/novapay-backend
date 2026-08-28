@@ -1,0 +1,48 @@
+const db = globalThis.__B44_DB__ || { auth:{ isAuthenticated: async()=>false, me: async()=>null }, entities:new Proxy({}, { get:()=>({ filter:async()=>[], get:async()=>null, create:async()=>({}), update:async()=>({}), delete:async()=>({}) }) }), integrations:{ Core:{ UploadFile:async()=>({ file_url:'' }) } } };
+
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
+
+const PAYOUT_ALIASES = ['TRC20', 'BEP20', 'ERC20', 'POL', 'TON', 'GRAM', 'BASE', 'DOGE', 'SOL', 'LTC', 'BTC', 'ETH', 'TRX', 'XRP', 'XMR', 'DAI', 'SHIB', 'BCH'];
+
+function payoutNet(net) {
+  const keys = (net.keys || []).map((k) => String(k).toUpperCase());
+  const alias = keys.find((k) => PAYOUT_ALIASES.includes(k));
+  return alias || (net.keys && net.keys[0]) || net.network;
+}
+
+export default async function(req) {
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await db.auth.me();
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const res = await fetch('https://api.oxapay.com/v1/common/currencies');
+    const json = await res.json();
+    const data = json.data || {};
+    const out = [];
+    Object.keys(data).forEach((sym) => {
+      const c = data[sym];
+      if (!c.status) return;
+      const networks = [];
+      if (c.networks) {
+        Object.keys(c.networks).forEach((nk) => {
+          const n = c.networks[nk];
+          networks.push({
+            network: n.network,
+            name: n.name,
+            keys: n.keys || [],
+            withdraw_fee: n.withdraw_fee || 0,
+            withdraw_min: n.withdraw_min || 0,
+            deposit_min: n.deposit_min || 0,
+            static_fixed_fee: n.static_fixed_fee || 0,
+            payout_net: payoutNet(n),
+          });
+        });
+      }
+      out.push({ symbol: c.symbol || sym, name: c.name || sym, networks });
+    });
+    return Response.json({ currencies: out });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+}

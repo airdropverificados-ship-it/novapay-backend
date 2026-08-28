@@ -1,0 +1,31 @@
+{
+  "name": "Referral",
+  "type": "object",
+  "properties": {
+    "referrer_id": {
+      "type": "string"
+    },
+    "referred_id": {
+      "type": "string"
+    },
+    "reward_tokens": {
+      "type": "number",
+      "default": 100
+    },
+    "deposit_bonus_tokens": {
+      "type": "number",
+      "default": 0
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "paid",
+        "pending"
+      ],
+      "default": "paid"
+    }
+  },
+  "required": [
+    "referrer_id"
+  ]
+}

@@ -1,0 +1,48 @@
+const db = globalThis.__B44_DB__ || { auth:{ isAuthenticated: async()=>false, me: async()=>null }, entities:new Proxy({}, { get:()=>({ filter:async()=>[], get:async()=>null, create:async()=>({}), update:async()=>({}), delete:async()=>({}) }) }), integrations:{ Core:{ UploadFile:async()=>({ file_url:'' }) } } };
+
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
+import { secrets } from 'base44:runtime';
+
+export default async function (req) {
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await db.auth.me();
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const body = await req.json();
+    const memberId = body.member_id;
+    const amount = Number(body.amount);
+    const currency = String(body.currency || '').toUpperCase();
+    const txHash = body.tx_hash || '';
+
+    if (!memberId || !amount || !currency) {
+      return Response.json({ error: 'member_id, amount, currency required' }, { status: 400 });
+    }
+
+    const member = await db.asServiceRole.entities.Member.get(memberId);
+    const chatId = member?.telegram_id;
+    if (!chatId) return Response.json({ ok: true, sent: false, reason: 'no_telegram_id' });
+
+    const token = secrets.get('TELEGRAM_BOT_TOKEN');
+    const lines = [
+      '✅ *Depósito confirmado*',
+      '',
+      `💰 Monto: *${amount} ${currency}*`,
+      `🪙 Moneda: ${currency}`,
+      txHash ? `🔗 Tx: \`${txHash}\`` : '',
+      '',
+      'Tu saldo ya está disponible en NovaPay.',
+    ].filter(Boolean);
+    const text = lines.join('\n');
+
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
+    });
+    const data = await res.json();
+    return Response.json({ ok: data.ok === true, sent: data.ok === true });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+}

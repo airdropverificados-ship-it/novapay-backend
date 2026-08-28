@@ -1,0 +1,57 @@
+const db = globalThis.__B44_DB__ || { auth:{ isAuthenticated: async()=>false, me: async()=>null }, entities:new Proxy({}, { get:()=>({ filter:async()=>[], get:async()=>null, create:async()=>({}), update:async()=>({}), delete:async()=>({}) }) }), integrations:{ Core:{ UploadFile:async()=>({ file_url:'' }) } } };
+
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.40';
+import { getConfig, merchantCall, buildCallback } from "../../shared/oxapay.ts";
+
+export default async function(req) {
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await db.auth.me();
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    const body = await req.json().catch(() => ({}));
+    const currency = String(body.currency || '').toUpperCase();
+    const network = String(body.network || '');
+    if (!currency || !network) return Response.json({ error: 'Moneda y red requeridas' }, { status: 400 });
+
+    const cfg = await getConfig(base44);
+    if (!cfg || !cfg.merchant_api_key) {
+      return Response.json({ error: 'OxaPay no configurado. Pide al admin que configure las API keys.' }, { status: 400 });
+    }
+
+    const members = await db.asServiceRole.entities.Member.filter({ created_by_id: user.id });
+    const member = members && members[0];
+    if (!member) return Response.json({ error: 'Miembro no encontrado' }, { status: 404 });
+
+    const key = currency + ':' + network;
+    const existing = await db.asServiceRole.entities.DepositAddress.filter({ member_id: member.id, network, currency, status: 'active' });
+    if (existing && existing[0] && existing[0].address) {
+      const addrs = { ...(member.deposit_addresses || {}), [key]: existing[0].address };
+      await db.asServiceRole.entities.Member.update(member.id, { deposit_addresses: addrs });
+      return Response.json({ address: existing[0].address, track_id: existing[0].track_id, network, currency, cached: true });
+    }
+
+    const payload = {
+      network,
+      to_currency: currency,
+      auto_withdrawal: false,
+      order_id: member.id,
+      description: 'NovaPay deposit ' + (member.username || member.telegram_id || ''),
+    };
+    const cb = buildCallback(cfg);
+    if (cb) payload.callback_url = cb;
+
+    const r = await merchantCall('/payment/static-address', cfg.merchant_api_key, payload);
+    if (!r || r.status !== 200 || !r.data || !r.data.address) {
+      return Response.json({ error: (r && r.message) || 'Error al generar dirección en OxaPay', raw: r }, { status: 502 });
+    }
+
+    const addr = r.data.address;
+    const trackId = String(r.data.track_id);
+    await db.entities.DepositAddress.create({ member_id: member.id, network, currency, address: addr, track_id: trackId, status: 'active' });
+    const addrs = { ...(member.deposit_addresses || {}), [key]: addr };
+    await db.asServiceRole.entities.Member.update(member.id, { deposit_addresses: addrs });
+    return Response.json({ address: addr, track_id: trackId, network, currency });
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "ApiKeyB2b",
+  "type": "object",
+  "properties": {
+    "member_id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "api_key": {
+      "type": "string"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "name",
+    "api_key"
+  ]
+}

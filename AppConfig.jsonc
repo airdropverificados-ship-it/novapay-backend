@@ -1,0 +1,50 @@
+{
+  "name": "AppConfig",
+  "type": "object",
+  "properties": {
+    "active_theme": {
+      "type": "string",
+      "enum": [
+        "normal",
+        "christmas",
+        "halloween",
+        "spring",
+        "cyberpunk",
+        "darkgold",
+        "glass",
+        "emerald"
+      ],
+      "default": "normal"
+    },
+    "roulette_enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "chests_enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "airdrop_cap_nvt": {
+      "type": "number",
+      "default": 15000
+    }
+  },
+  "rls": {
+    "read": {},
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
