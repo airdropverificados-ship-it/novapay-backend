@@ -6,6 +6,8 @@ and an automated B2B gateway for developers.
 
 > **Status:** in development (beta). This repository holds the app's
 > frontend and backend built on Base44.
+>
+> **Live demo:** https://t.me/BINOVIQ_bot
 
 ## Features
 
